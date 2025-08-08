@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Discord Staff Application</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts - Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <!-- React, ReactDOM, and Babel CDNs -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // IMPORTANT: These global variables are provided by the Canvas environment.
+        // In a real HTML file outside of Canvas, you would replace these with your actual Firebase config.
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        window.firebaseApp = initializeApp(firebaseConfig);
+        window.db = getFirestore(window.firebaseApp);
+        window.auth = getAuth(window.firebaseApp);
+
+        // Initial Firebase Authentication setup
+        onAuthStateChanged(window.auth, async (user) => {
+            if (user) {
+                window.userId = user.uid;
+            } else {
+                if (initialAuthToken) {
+                    try {
+                        await signInWithCustomToken(window.auth, initialAuthToken);
+                        window.userId = window.auth.currentUser.uid;
+                    } catch (error) {
+                        console.error("Error signing in with custom token, signing in anonymously:", error);
+                        await signInAnonymously(window.auth);
+                        window.userId = window.auth.currentUser.uid;
+                    }
+                } else {
+                    await signInAnonymously(window.auth);
+                    window.userId = window.auth.currentUser.uid;
+                }
+            }
+            window.isAuthReady = true; // Signal that auth is ready
+        });
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* Custom CSS for animated background shapes */
+        @keyframes moveAndFade {
+            0% {
+                transform: translate(0, 0) rotate(0deg) scale(1);
+                opacity: 0.1;
+            }
+            25% {
+                transform: translate(25vw, 25vh) rotate(90deg) scale(1.1);
+                opacity: 0.2;
+            }
+            50% {
+                transform: translate(50vw, 50vh) rotate(180deg) scale(1.2);
+                opacity: 0.15;
+            }
+            75% {
+                transform: translate(75vw, 25vh) rotate(270deg) scale(1.1);
+                opacity: 0.2;
+            }
+            100% {
+                transform: translate(100vw, 0) rotate(360deg) scale(1);
+                opacity: 0.1;
+            }
+        }
+
+        .animated-background-shapes .shape {
+            position: absolute;
+            background: rgba(255, 255, 255, 0.1); /* White with transparency */
+            border-radius: 15px; /* For rounded look */
+            filter: blur(5px); /* To make them soft and blend */
+            animation: moveAndFade infinite;
+            width: 80px; /* Base size */
+            height: 80px; /* Base size */
+        }
+        /* Make them look like soft, rounded triangles using border-radius and rotation */
+        .animated-background-shapes .shape:nth-child(3n+1) {
+            border-radius: 50% 0 50% 0; /* Simulates a rounded triangle */
+            width: 90px;
+            height: 90px;
+        }
+        .animated-background-shapes .shape:nth-child(3n+2) {
+            border-radius: 0 50% 0 50%; /* Another rounded triangle variant */
+            width: 70px;
+            height: 70px;
+        }
+        .animated-background-shapes .shape:nth-child(3n) {
+            border-radius: 50% 50% 0 0; /* Yet another rounded shape */
+            width: 100px;
+            height: 100px;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+        const { createRoot } = ReactDOM;
+
+        // Password Input Modal Component
+        const PasswordModal = ({ onPasswordSubmit, onClose, errorMessage }) => {
+            const [passwordInput, setPasswordInput] = useState('');
+
+            const handleChange = (e) => {
+                setPasswordInput(e.target.value);
+            };
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                onPasswordSubmit(passwordInput);
+                setPasswordInput(''); // Clear password input after submission attempt
+            };
+
+            return (
+                <div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50">
+                    <div className="bg-white p-6 sm:p-8 rounded-lg shadow-2xl w-full max-w-sm border border-indigo-300">
+                        <h2 className="text-xl sm:text-2xl font-bold text-indigo-900 mb-4 text-center">Enter Password</h2>
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <div>
+                                <label htmlFor="password" className="block text-gray-800 text-sm font-semibold mb-2">
+                                    Staff Password:
+                                </label>
+                                <input
+                                    type="password"
+                                    id="password"
+                                    name="password"
+                                    value={passwordInput}
+                                    onChange={handleChange}
+                                    placeholder="••••••••"
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition duration-200 ease-in-out text-gray-800"
+                                    required
+                                />
+                            </div>
+                            {errorMessage && ( // Show error message inside modal
+                                <div className="p-2 rounded-lg text-center bg-red-100 text-red-700 text-sm">
+                                    {errorMessage}
+                                </div>
+                            )}
+                            <div className="flex justify-end space-x-3">
+                                <button
+                                    type="button"
+                                    onClick={onClose}
+                                    className="px-4 py-2 bg-gray-300 text-gray-800 rounded-lg hover:bg-gray-400 transition duration-200"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition duration-200"
+                                >
+                                    Submit
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            );
+        };
+
+
+        // Main App component
+        const App = () => {
+            const [formData, setFormData] = useState({
+                discordUsername: '',
+                age: '',
+                timezone: '',
+                pastExperience: '',
+                whyJoinExperience: '',
+                activityLevel: '',
+            });
+            const [message, setMessage] = useState('');
+            const [isError, setIsError] = useState(false);
+            const [applications, setApplications] = useState([]);
+            const [isReviewerView, setIsReviewerView] = useState(false);
+            const [showPasswordModal, setShowPasswordModal] = useState(false);
+            const [modalErrorMessage, setModalErrorMessage] = useState('');
+
+            // Firebase states, accessed via window object since they're global
+            const db = window.db;
+            const auth = window.auth;
+            const userId = window.userId; // This will be set after auth is ready
+            const isAuthReady = window.isAuthReady; // This will be true after auth is ready
+
+
+            // Fetch applications for reviewers using onSnapshot
+            useEffect(() => {
+                if (isAuthReady && db && auth?.currentUser && isReviewerView) {
+                    const currentAppId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+                    const applicationsCollectionRef = window.collection(db, `artifacts/${currentAppId}/public/data/staffApplications`);
+                    const q = window.query(applicationsCollectionRef);
+
+                    const unsubscribe = window.onSnapshot(q, (snapshot) => {
+                        const fetchedApplications = snapshot.docs.map(doc => ({
+                            id: doc.id,
+                            ...doc.data()
+                        }));
+                        setApplications(fetchedApplications);
+                    }, (error) => {
+                        console.error("Error fetching applications:", error);
+                        setMessage("Failed to load applications.");
+                        setIsError(true);
+                    });
+
+                    return () => unsubscribe();
+                }
+            }, [isAuthReady, db, auth, isReviewerView]);
+
+            // Handle input changes
+            const handleChange = (e) => {
+                const { name, value } = e.target;
+                setFormData((prevData) => ({
+                    ...prevData,
+                    [name]: value,
+                }));
+            };
+
+            // Handle form submission and save to Firestore
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                if (!db) {
+                    setMessage('Application form is not ready. Please try again.');
+                    setIsError(true);
+                    return;
+                }
+
+                if (
+                    !formData.discordUsername ||
+                    !formData.age ||
+                    !formData.timezone ||
+                    !formData.pastExperience ||
+                    !formData.whyJoinExperience ||
+                    !formData.activityLevel
+                ) {
+                    setMessage('Please fill in all required fields.');
+                    setIsError(true);
+                    return;
+                }
+
+                setMessage('Submitting application...');
+                setIsError(false);
+
+                try {
+                    const currentAppId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+                    const applicationsCollectionRef = window.collection(db, `artifacts/${currentAppId}/public/data/staffApplications`);
+                    await window.addDoc(applicationsCollectionRef, {
+                        ...formData,
+                        timestamp: new Date().toISOString(),
+                    });
+
+                    setMessage('Application submitted successfully! We will review it shortly.');
+                    setIsError(false);
+                    setFormData({
+                        discordUsername: '',
+                        age: '',
+                        timezone: '',
+                        pastExperience: '',
+                        whyJoinExperience: '',
+                        activityLevel: '',
+                    });
+                } catch (error) {
+                    console.error("Error submitting application:", error);
+                    setMessage('Failed to submit application. Please try again.');
+                    setIsError(true);
+                }
+            };
+
+            // Function to initiate password check for reviewer view
+            const handleReviewerAccessAttempt = () => {
+                setMessage('');
+                setIsError(false);
+                setModalErrorMessage('');
+                setShowPasswordModal(true);
+            };
+
+            // Function to handle password submission from the modal
+            const handlePasswordSubmit = (password) => {
+                const correctPassword = "Privatestaff567";
+
+                if (password === correctPassword) {
+                    setIsReviewerView(true);
+                    setMessage('Access granted!');
+                    setIsError(false);
+                    setShowPasswordModal(false);
+                    setModalErrorMessage('');
+                } else {
+                    setModalErrorMessage('Incorrect password. Please try again.');
+                }
+            };
+
+            // Render the application form (applicant view)
+            const renderApplicationForm = () => (
+                <div className="relative bg-white bg-opacity-95 rounded-2xl shadow-xl p-6 sm:p-8 md:p-10 w-full max-w-md border border-indigo-300 z-10">
+                    <h1 className="text-3xl sm:text-4xl font-extrabold text-center text-indigo-900 mb-6 sm:mb-8">
+                        Staff Application
+                    </h1>
+                    <p className="text-center text-gray-700 mb-6 text-sm sm:text-base">
+                        Thank you for your interest in joining our Discord staff team! Please fill out the form below carefully.
+                    </p>
+
+                    {message && (
+                        <div className={`p-3 rounded-lg text-center mb-5 ${isError ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                            {message}
+                        </div>
+                    )}
+
+                    <form onSubmit={handleSubmit} className="space-y-5">
+                        <div>
+                            <label htmlFor="discordUsername" className="block text-gray-800 text-sm font-semibold mb-2">
+                                Discord Username <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                                type="text"
+                                id="discordUsername"
+                                name="discordUsername"
+                                value={formData.discordUsername}
+                                onChange={handleChange}
+                                placeholder="e.g., YourUsername#1234"
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition duration-200 ease-in-out text-gray-800"
+                                required
+                            />
+                        </div>
+
+                        <div>
+                            <label htmlFor="age" className="block text-gray-800 text-sm font-semibold mb-2">
+                                How old are you? <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                                type="number"
+                                id="age"
+                                name="age"
+                                value={formData.age}
+                                onChange={handleChange}
+                                placeholder="Your age"
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition duration-200 ease-in-out text-gray-800"
+                                min="13"
+                                required
+                            />
+                        </div>
+
+                        <div>
+                            <label htmlFor="timezone" className="block text-gray-800 text-sm font-semibold mb-2">
+                                Time Zone <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                                type="text"
+                                id="timezone"
+                                name="timezone"
+                                value={formData.timezone}
+                                onChange={handleChange}
+                                placeholder="e.g., EST, GMT+1"
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition duration-200 ease-in-out text-gray-800"
+                                required
+                            />
+                        </div>
+
+                        <div>
+                            <label htmlFor="pastExperience" className="block text-gray-800 text-sm font-semibold mb-2">
+                                Did you have any past experience as a staff member? If yes, for how long? <span className="text-red-500">*</span>
+                            </label>
+                            <textarea
+                                id="pastExperience"
+                                name="pastExperience"
+                                value={formData.pastExperience}
+                                onChange={handleChange}
+                                placeholder="Describe your past staff experience and duration (e.g., Moderator on Server X for 6 months)."
+                                rows="3"
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition duration-200 ease-in-out resize-y text-gray-800"
+                                required
+                            ></textarea>
+                        </div>
+
+                        <div>
+                            <label htmlFor="whyJoinExperience" className="block text-gray-800 text-sm font-semibold mb-2">
+                                Why do you think you should be part of the staff team, and what relevant experience do you have? <span className="text-red-500">*</span>
+                            </label>
+                            <textarea
+                                id="whyJoinExperience"
+                                name="whyJoinExperience"
+                                value={formData.whyJoinExperience}
+                                onChange={handleChange}
+                                placeholder="Tell us about your motivations, skills, and any experience that makes you a good fit for our team."
+                                rows="6"
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition duration-200 ease-in-out resize-y text-gray-800"
+                                required
+                            ></textarea>
+                        </div>
+
+                        <div>
+                            <label htmlFor="activityLevel" className="block text-gray-800 text-sm font-semibold mb-2">
+                                Will you be active often? <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                                type="text"
+                                id="activityLevel"
+                                name="activityLevel"
+                                value={formData.activityLevel}
+                                onChange={handleChange}
+                                placeholder="e.g., Daily, a few hours per week, etc."
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition duration-200 ease-in-out text-gray-800"
+                                required
+                            />
+                        </div>
+
+                        <button
+                            type="submit"
+                            className="w-full bg-indigo-700 hover:bg-indigo-800 text-white font-bold py-3 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition duration-300 ease-in-out transform hover:scale-105 shadow-md hover:shadow-lg"
+                        >
+                            Submit Application
+                        </button>
+                    </form>
+                </div>
+            );
+
+            // Render the reviewer dashboard
+            const renderReviewerDashboard = () => (
+                <div className="relative bg-white bg-opacity-95 rounded-2xl shadow-xl p-6 sm:p-8 md:p-10 w-full max-w-2xl border border-indigo-300 z-10 overflow-y-auto max-h-[90vh]">
+                    <h1 className="text-3xl sm:text-4xl font-extrabold text-center text-indigo-900 mb-6 sm:mb-8">
+                        Staff Applications Review
+                    </h1>
+                    <p className="text-center text-gray-700 mb-4 text-sm sm:text-base">
+                        Welcome, reviewer! Here you can see submitted applications.
+                    </p>
+                    {userId && (
+                        <p className="text-center text-gray-600 mb-6 text-xs sm:text-sm">
+                            Your Reviewer ID: <span className="font-mono bg-gray-100 px-2 py-1 rounded-md break-all">{userId}</span>
+                        </p>
+                    )}
+
+                    {message && (
+                        <div className={`p-3 rounded-lg text-center mb-5 ${isError ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                            {message}
+                        </div>
+                    )}
+
+                    {applications.length === 0 ? (
+                        <p className="text-center text-gray-600">No applications submitted yet.</p>
+                    ) : (
+                        <div className="space-y-4">
+                            {applications.map((app) => (
+                                <div key={app.id} className="bg-gray-50 p-4 rounded-lg shadow-sm border border-gray-200">
+                                    <h3 className="text-lg font-semibold text-indigo-800 mb-2">Application from {app.discordUsername}</h3>
+                                    <p className="text-sm text-gray-700 mb-1"><strong>Age:</strong> {app.age}</p>
+                                    <p className="text-sm text-gray-700 mb-1"><strong>Time Zone:</strong> {app.timezone}</p>
+                                    <p className="text-sm text-gray-700 mb-1"><strong>Past Staff Experience:</strong> {app.pastExperience || 'N/A'}</p>
+                                    <p className="text-sm text-gray-700 mb-1"><strong>Why Join & Experience:</strong> {app.whyJoinExperience}</p>
+                                    <p className="text-sm text-gray-700 mb-1"><strong>Activity Level:</strong> {app.activityLevel}</p>
+                                    <p className="text-xs text-gray-500 mt-2">Submitted on: {new Date(app.timestamp).toLocaleString()}</p>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            );
+
+            return (
+                <div className="min-h-screen relative overflow-hidden flex items-center justify-center p-4 sm:p-6">
+                    {/* Animated Background */}
+                    <div className="absolute inset-0 bg-gradient-to-br from-indigo-800 to-purple-900 z-0">
+                        <div className="animated-background-shapes">
+                            {Array.from({ length: 20 }).map((_, i) => (
+                                <div
+                                    key={i}
+                                    className="shape"
+                                    style={{
+                                        left: `${Math.random() * 100}vw`,
+                                        top: `${Math.random() * 100}vh`,
+                                        animationDelay: `${Math.random() * 10}s`,
+                                        animationDuration: `${15 + Math.random() * 10}s`,
+                                        opacity: `${0.1 + Math.random() * 0.2}`,
+                                        transform: `scale(${0.5 + Math.random() * 1}) rotate(${Math.random() * 360}deg)`,
+                                    }}
+                                ></div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Toggle Button for views */}
+                    <div className="absolute top-4 right-4 z-20 flex space-x-2">
+                        <button
+                            onClick={() => {
+                                setIsReviewerView(false);
+                                setMessage('');
+                                setIsError(false);
+                                setShowPasswordModal(false);
+                                setModalErrorMessage('');
+                            }}
+                            className={`px-4 py-2 rounded-lg text-sm font-semibold transition duration-200 ${
+                                !isReviewerView ? 'bg-indigo-600 text-white shadow-md' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                            }`}
+                        >
+                            Applicant View
+                        </button>
+                        <button
+                            onClick={handleReviewerAccessAttempt}
+                            className={`px-4 py-2 rounded-lg text-sm font-semibold transition duration-200 ${
+                                isReviewerView ? 'bg-indigo-600 text-white shadow-md' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                            }`}
+                        >
+                            Reviewer View
+                        </button>
+                    </div>
+
+                    {/* Render based on view state */}
+                    {isReviewerView ? renderReviewerDashboard() : renderApplicationForm()}
+
+                    {/* Render Password Modal if showPasswordModal is true */}
+                    {showPasswordModal && (
+                        <PasswordModal
+                            onPasswordSubmit={handlePasswordSubmit}
+                            onClose={() => {
+                                setShowPasswordModal(false);
+                                setModalErrorMessage('');
+                            }}
+                            errorMessage={modalErrorMessage}
+                        />
+                    )}
+                </div>
+            );
+        };
+
+        const container = document.getElementById('root');
+        const root = createRoot(container);
+        root.render(<App />);
+    </script>
+</body>
+</html>
+
